@@ -216,6 +216,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Net.Sockets;
+using TMPro;
 using UnityEngine;
 
 public class CardManager : MonoBehaviour
@@ -224,9 +225,11 @@ public class CardManager : MonoBehaviour
     public Transform CardPosition;
     public Vector2 StartPosition = new Vector2(-2f, 3.5f);
     public Sprite backSprite;
-    public List<Sprite> frontSprites; // Danh sách các sprite mặt trước
-    public List<Sprite> frontSpritesVoca;
+    //public List<Sprite> frontSprites; // Danh sách các sprite mặt trước
+    //public List<Sprite> frontSpritesVoca;
     public GameObject gameOver;
+    public TextMeshProUGUI timerText;
+    public TextMeshProUGUI timedis;
 
     private Vector2 offset = new Vector2(1.3f, 2f);
     [HideInInspector]
@@ -237,12 +240,22 @@ public class CardManager : MonoBehaviour
 
     private TcpClient client;
     private NetworkStream stream;
+    private string userId;
+    private string categoryId;
+    private string levelId;
+    private float elapsedTime = 0f;
+    private bool isTimerRunning = false;
+    private bool recordSent;
 
     void Start()
     {
         Card.OnCardClicked += OnCardClicked;
         // Không cần tạo card trong Start nữa
          StartCoroutine(FlipAllCardsTemporarily(8f)); // Lật tất cả các thẻ lên và úp lại sau 5 giây
+        userId = PlayerPrefs.GetString("userId");
+        categoryId = PlayerPrefs.GetString("categoryId");
+        levelId = PlayerPrefs.GetString("levelId");
+        recordSent = false;
     }
 
     void Update()
@@ -251,6 +264,11 @@ public class CardManager : MonoBehaviour
         {
             Debug.Log("Game Over");
             GameOver();
+        }
+        if (isTimerRunning)
+        {
+            elapsedTime += Time.deltaTime;
+            timerText.text = $"Time: {elapsedTime:F2}s";
         }
     }
 
@@ -418,6 +436,7 @@ public class CardManager : MonoBehaviour
             }
         }
         SetAllCardsClick(true);
+        isTimerRunning = true;
     }
 
     private void SetAllCardsClick(bool clickable)
@@ -436,6 +455,14 @@ public class CardManager : MonoBehaviour
             return;
         }
         Debug.Log("Game Over method called");
+        isTimerRunning = false;
         gameOver.SetActive(true);
+        timedis.text = $"TIME: {elapsedTime:F2}s";
+        //gameOver.GetComponent<TextMeshProUGUI>().text = $"Time: {elapsedTime:F2}s";
+        if (!recordSent)
+        {
+        Client.Instance.SendGameRecord(userId, categoryId, levelId, elapsedTime);
+            recordSent = true;
+        }
     }
 }

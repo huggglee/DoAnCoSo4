@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net.Sockets;
 using System.Text;
+using TMPro;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -36,7 +37,7 @@ public class Client : MonoBehaviour
     {
         try
         {
-            client = new TcpClient("192.168.43.59", 8080);
+            client = new TcpClient("127.0.0.1", 8080);
             stream = client.GetStream();
             Debug.Log("Kết nối đến server thành công!");
         }
@@ -70,18 +71,6 @@ public class Client : MonoBehaviour
         }
     }
 
-    public void selectCategory(string category)
-    {
-        if (client != null && client.Connected)
-        {
-            SendMessageToServer($"category:{category}");
-        }
-        else
-        {
-            Debug.Log("Chưa kết nối với server!");
-        }
-    }
-
     public void SendMessageToServer(string message)
     {
         byte[] data = Encoding.UTF8.GetBytes(message);
@@ -92,25 +81,57 @@ public class Client : MonoBehaviour
         string response = Encoding.UTF8.GetString(buffer, 0, bytesRead);
         HandleServerResponse(response);
     }
+    public void SendGameRecord(string userId, string categoryId, string levelId, float timeRecord)
+    {
+        if (client != null && client.Connected)
+        {
+            string message = $"record:{userId}:{categoryId}:{levelId}:{timeRecord:F2}";
+            SendMessageToServer(message);
+        }
+        else
+        {
+            Debug.LogError("Chưa kết nối với server!");
+        }
+    }
 
     private void HandleServerResponse(string response)
     {
-        if (response == "Login:success")
+        //handle login
+        if (response.StartsWith("Login"))
         {
-            Debug.Log("Đăng nhập thành công!");
-            SceneManager.sceneLoaded += OnSceneLoaded;
-            SceneManager.LoadScene("Category");
+            var reponse2 = response.Substring("Login".Length + 1);
+            var state = reponse2.Split('|')[0];
+            //Debug.Log(state);
+            if (state == "Success")
+            {
+                var userId = reponse2.Split('|')[1];
+                var username = reponse2.Split('|')[2];
+                //Debug.Log(userId);
+                //Debug.Log(username);
+                PlayerPrefs.SetString("userId", userId);
+                PlayerPrefs.SetString("username", username);
+                PlayerPrefs.Save();
+                Debug.Log("Đăng nhập thành công!");
+                SceneManager.sceneLoaded += OnSceneLoaded;
+                SceneManager.LoadScene("Category");
+            }
+            else
+            {
+                Debug.Log("Đăng nhập thất bại!");
+            }
+          
         }
+        // get all categories
         else if (response.StartsWith("categories"))
         {
             Debug.Log("Received categories response");
             var categories = response.Substring("categories".Length + 1).Split('|');
-            List<string> options = new List<string>();
+            List<(string id,string name)> options = new List<(string id, string name)>();
 
             foreach (var category in categories)
             {
                 var data = category.Split(':');
-                options.Add(data[1]);
+                options.Add((data[0],data[1]));
             }
 
             GameObject categoryManager = GameObject.FindGameObjectWithTag("CategoryManager");
@@ -133,30 +154,47 @@ public class Client : MonoBehaviour
                 Debug.LogError("CategoryManager GameObject not found");
             }
         }
+        //get all levels
+        else if (response.StartsWith("levels"))
+        {
+            Debug.Log("Received levels response");
+            var levels = response.Substring("levels".Length + 1).Split('|');
+            List<(string id, string name)> options = new List<(string id, string name)>();
+
+            foreach (var level in levels)
+            {
+                var data = level.Split(':');
+                options.Add((data[0], data[1]));
+            }
+
+            GameObject categoryManager = GameObject.FindGameObjectWithTag("CategoryManager");
+            if (categoryManager != null)
+            {
+                Debug.Log("CategoryManager found");
+                CategoryManager ca = categoryManager.GetComponent<CategoryManager>();
+                if (ca != null)
+                {
+                    Debug.Log("CategoryManager component found");
+                    ca.DisplayLevels(options);
+                }
+                else
+                {
+                    Debug.LogError("CategoryManager component not found on the GameObject");
+                }
+            }
+            else
+            {
+                Debug.LogError("CategoryManager GameObject not found");
+            }
+        }
+        //get words
         else if (response.StartsWith("words"))
         {
             var words = response.Substring("words".Length + 1).Split('|');
-            var level = words[0];
-            words = words.Skip(1).ToArray();
+            int row = int.Parse(words[0]);
+            int col = int.Parse(words[1]);
             var random = new System.Random();
-            words = words.OrderBy(x => random.Next()).ToArray();
-            int row = 0, col = 0;
-
-            if (level == "Easy")
-            {
-                row = 2;
-                col = 2;
-            }
-            else if (level == "Medium")
-            {
-                row = 2;
-                col = 4;
-            }
-            else if (level == "Hard")
-            {
-                row = 4;
-                col = 4;
-            }
+            words = words.Skip(2).OrderBy(x => random.Next()).ToArray();
 
             int useCardPairs = row * col/2;
             List<(Sprite, Sprite)> cardPairs = new List<(Sprite, Sprite)>();
@@ -218,7 +256,7 @@ public class Client : MonoBehaviour
         }
     }
 
-    private Sprite LoadSprite(string name)
+    public Sprite LoadSprite(string name)
     {
         return Resources.Load<Sprite>($"Sprites/{name}");
     }
